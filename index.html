@@ -4,9 +4,14 @@
 <meta charset="UTF-8">
 <title>Kanban Corporativo Total</title>
 
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- Excel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Dashboard -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -52,8 +57,8 @@ button{margin-top:5px;cursor:pointer}
 <h3>📊 Dashboard</h3>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px">
-<canvas id="chartPrioridad"></canvas>
-<canvas id="chartColumnas"></canvas>
+<canvas id="chartPrioridad" height="200"></canvas>
+<canvas id="chartColumnas" height="200"></canvas>
 </div>
 
 <br>
@@ -82,15 +87,15 @@ let cards=[];
 let dragId=null;
 let chart1,chart2;
 
-db.collection("kanban").orderBy("order","asc")
-.onSnapshot(s=>{
+// realtime tareas
+db.collection("kanban").orderBy("order","asc").onSnapshot(s=>{
  cards=[];
  s.forEach(d=>cards.push({id:d.id,...d.data()}));
  render();
 });
 
-db.collection("historial").orderBy("fecha","desc")
-.onSnapshot(s=>{
+// historial
+db.collection("historial").orderBy("fecha","desc").onSnapshot(s=>{
  let h=document.getElementById("hist");
  h.innerHTML="";
  s.forEach(d=>{
@@ -103,6 +108,7 @@ function log(text,action){
  db.collection("historial").add({text,action,fecha:new Date()});
 }
 
+// KPI
 function stats(){
  const alta=cards.filter(c=>c.prioridad==="Alta").length;
  const media=cards.filter(c=>c.prioridad==="Media").length;
@@ -115,6 +121,7 @@ function stats(){
  <div class='stat'>🟢 ${baja}</div>`;
 }
 
+// DASHBOARD
 function renderDashboard(){
 
  const alta=cards.filter(c=>c.prioridad==="Alta").length;
@@ -127,29 +134,35 @@ function renderDashboard(){
  const t=cards.filter(c=>c.col===3).length;
 
  if(chart1)chart1.destroy();
- chart1=new Chart(chartPrioridad,{
+ chart1=new Chart(document.getElementById("chartPrioridad"),{
    type:'pie',
-   data:{labels:["Alta","Media","Baja"],
-   datasets:[{data:[alta,media,baja],
-   backgroundColor:["red","orange","green"]}]}
+   data:{
+     labels:["Alta","Media","Baja"],
+     datasets:[{data:[alta,media,baja],
+     backgroundColor:["red","orange","green"]}]
+   }
  });
 
  if(chart2)chart2.destroy();
- chart2=new Chart(chartColumnas,{
+ chart2=new Chart(document.getElementById("chartColumnas"),{
    type:'bar',
-   data:{labels:["Pendiente","Proceso","Revisión","Terminado"],
-   datasets:[{data:[p,pr,r,t],backgroundColor:"#0078D4"}]}
+   data:{
+     labels:["Pendiente","Proceso","Revisión","Terminado"],
+     datasets:[{data:[p,pr,r,t],
+     backgroundColor:"#0078D4"}]
+   }
  });
 
  let a=[];
- if(alta>5)a.push("⚠️ Muchas críticas");
- if(p>pr)a.push("⚠️ Pendientes altas");
+ if(alta>5)a.push("⚠️ Muchas tareas críticas");
+ if(p>pr)a.push("⚠️ Demasiadas pendientes");
  if(r>pr)a.push("⚠️ Cuello en revisión");
 
  document.getElementById("alertas").innerHTML=
  a.length?a.join("<br>"):"✅ Todo bajo control";
 }
 
+// render tablero
 function render(){
  stats();
  renderDashboard();
@@ -180,11 +193,10 @@ function render(){
    return f==="todos"||x.prioridad===f;
  })
  .sort((a,b)=>{
-  const o={"Alta":1,"Media":2,"Baja":3};
-  return(o[a.prioridad]||2)-(o[b.prioridad]||2);
+   const o={"Alta":1,"Media":2,"Baja":3};
+   return(o[a.prioridad]||2)-(o[b.prioridad]||2);
  })
  .map(x=>`
-
  <div class='card'
  style="border-left:5px solid ${
  x.prioridad==='Alta'?'red':
@@ -198,7 +210,6 @@ function render(){
 
  <button onclick="del('${x.id}')">❌</button>
  </div>
-
  `).join("");
 
  c.innerHTML=`<h3>${n}</h3>${html}<button onclick="add(${i})">+ Agregar</button>`;
@@ -207,12 +218,12 @@ function render(){
  });
 }
 
+// funciones
 function drag(id){dragId=id}
 
 function add(col){
  let t=prompt("Tarea");
  let p=prompt("Prioridad: Alta / Media / Baja")||"Media";
-
  p=p.charAt(0).toUpperCase()+p.slice(1).toLowerCase();
 
  if(!t)return;
@@ -239,33 +250,32 @@ function del(id){
  log("Eliminado","Borrado");
 }
 
+// export
 function exportHistorial(){
  db.collection("historial").get().then(s=>{
- let data=[["Acción","Detalle","Fecha"]];
- s.forEach(d=>{
-  let x=d.data();
-  data.push([x.action,x.text,new Date(x.fecha.seconds*1000)]);
- });
-
- let ws=XLSX.utils.aoa_to_sheet(data);
- let wb=XLSX.utils.book_new();
- XLSX.utils.book_append_sheet(wb,ws,"Movimientos");
- XLSX.writeFile(wb,"Historial.xlsx");
+  let data=[["Acción","Detalle","Fecha"]];
+  s.forEach(d=>{
+   let x=d.data();
+   data.push([x.action,x.text,new Date(x.fecha.seconds*1000)]);
+  });
+  let ws=XLSX.utils.aoa_to_sheet(data);
+  let wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Movimientos");
+  XLSX.writeFile(wb,"Historial.xlsx");
  });
 }
 
 function exportActividades(){
  db.collection("actividades").get().then(s=>{
- let data=[["Tarea","Prioridad","Fecha"]];
- s.forEach(d=>{
-  let x=d.data();
-  data.push([x.text,x.prioridad,new Date(x.fecha.seconds*1000)]);
- });
-
- let ws=XLSX.utils.aoa_to_sheet(data);
- let wb=XLSX.utils.book_new();
- XLSX.utils.book_append_sheet(wb,ws,"Actividades");
- XLSX.writeFile(wb,"Actividades.xlsx");
+  let data=[["Tarea","Prioridad","Fecha"]];
+  s.forEach(d=>{
+   let x=d.data();
+   data.push([x.text,x.prioridad,new Date(x.fecha.seconds*1000)]);
+  });
+  let ws=XLSX.utils.aoa_to_sheet(data);
+  let wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Actividades");
+  XLSX.writeFile(wb,"Actividades.xlsx");
  });
 }
 
