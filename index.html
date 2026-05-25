@@ -2,77 +2,45 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Kanban Corporativo Total</title>
+<title>Kanban Corporativo PRO</title>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-
-<!-- Excel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-<!-- Dashboard -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{font-family:Segoe UI;background:#eef1f5;margin:0;padding:15px}
-h2{text-align:center}
-
-.top{display:flex;gap:10px;margin-bottom:15px}
-.stat{background:#fff;padding:10px;border-radius:8px;flex:1;text-align:center;font-weight:bold}
-
+body{font-family:Segoe UI;background:#eef1f5;padding:15px}
 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.col{background:#fff;padding:10px;border-radius:10px;min-height:300px}
-
-.card{
-background:#fafafa;
-padding:8px;
-margin-bottom:6px;
-border-radius:6px;
-cursor:grab;
-transition:0.2s;
-}
-.card:hover{transform:scale(1.03)}
-
-button{margin-top:5px;cursor:pointer}
+.col{background:#fff;padding:10px;border-radius:10px}
+.card{background:#fafafa;padding:8px;margin-bottom:6px;border-radius:6px}
 </style>
 </head>
 
 <body>
 
-<h2>🚀 Kanban Corporativo Total</h2>
+<h2>🚀 Kanban Corporativo PRO</h2>
 
-<select id="filtro" onchange="render()">
-<option value="todos">Todas</option>
-<option value="Alta">🔴 Alta</option>
-<option value="Media">🟠 Media</option>
-<option value="Baja">🟢 Baja</option>
+<!-- FORMULARIO REAL -->
+<input id="txtTarea" placeholder="Tarea">
+<select id="selPrioridad">
+  <option value="Alta">🔴 Alta</option>
+  <option value="Media" selected>🟠 Media</option>
+  <option value="Baja">🟢 Baja</option>
 </select>
-
-<br><br>
-
-<button onclick="exportHistorial()">📥 Movimientos</button>
-<button onclick="exportActividades()">📊 Actividades</button>
+<button onclick="crear()">Agregar</button>
 
 <h3>📊 Dashboard</h3>
+<canvas id="chart1"></canvas>
+<canvas id="chart2"></canvas>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px">
-<canvas id="chartPrioridad" height="200"></canvas>
-<canvas id="chartColumnas" height="200"></canvas>
-</div>
+<div id="stats"></div>
 
-<br>
-<div id="alertas" style="background:white;padding:10px;border-radius:8px"></div>
-
-<div class="top" id="stats"></div>
-<div class="board" id="board"></div>
-
-<h3>Historial</h3>
-<ul id="hist"></ul>
+<div id="board" class="board"></div>
 
 <script>
 
-const firebaseConfig = {
+const firebaseConfig={
  apiKey:"AIzaSyASsFAKZ5t1YUylzLfQVuDtpzAWnAsCS8g",
  authDomain:"tablero-kamban.firebaseapp.com",
  projectId:"tablero-kamban"
@@ -81,206 +49,116 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 
-const COLS=["Pendiente","Proceso","Revisión","Terminado"];
+const COLS=["Pendiente","Proceso","Revision","Terminado"];
 
 let cards=[];
-let dragId=null;
 let chart1,chart2;
 
-// realtime tareas
-db.collection("kanban").orderBy("order","asc").onSnapshot(s=>{
+// 🔄 realtime
+db.collection("kanban").onSnapshot(s=>{
  cards=[];
  s.forEach(d=>cards.push({id:d.id,...d.data()}));
  render();
 });
 
-// historial
-db.collection("historial").orderBy("fecha","desc").onSnapshot(s=>{
- let h=document.getElementById("hist");
- h.innerHTML="";
- s.forEach(d=>{
-   let x=d.data();
-   h.innerHTML+=`<li>${x.action} - ${x.text}</li>`;
- });
-});
+// ✅ CREAR TAREA (sin errores)
+function crear(){
+ const text=document.getElementById("txtTarea").value;
+ const prioridad=document.getElementById("selPrioridad").value;
 
-function log(text,action){
- db.collection("historial").add({text,action,fecha:new Date()});
-}
-
-// KPI
-function stats(){
- const alta=cards.filter(c=>c.prioridad==="Alta").length;
- const media=cards.filter(c=>c.prioridad==="Media").length;
- const baja=cards.filter(c=>c.prioridad==="Baja").length;
-
- document.getElementById("stats").innerHTML=`
- <div class='stat'>Total ${cards.length}</div>
- <div class='stat'>🔴 ${alta}</div>
- <div class='stat'>🟠 ${media}</div>
- <div class='stat'>🟢 ${baja}</div>`;
-}
-
-// DASHBOARD
-function renderDashboard(){
-
- const alta=cards.filter(c=>c.prioridad==="Alta").length;
- const media=cards.filter(c=>c.prioridad==="Media").length;
- const baja=cards.filter(c=>c.prioridad==="Baja").length;
-
- const p=cards.filter(c=>c.col===0).length;
- const pr=cards.filter(c=>c.col===1).length;
- const r=cards.filter(c=>c.col===2).length;
- const t=cards.filter(c=>c.col===3).length;
-
- if(chart1)chart1.destroy();
- chart1=new Chart(document.getElementById("chartPrioridad"),{
-   type:'pie',
-   data:{
-     labels:["Alta","Media","Baja"],
-     datasets:[{data:[alta,media,baja],
-     backgroundColor:["red","orange","green"]}]
-   }
- });
-
- if(chart2)chart2.destroy();
- chart2=new Chart(document.getElementById("chartColumnas"),{
-   type:'bar',
-   data:{
-     labels:["Pendiente","Proceso","Revisión","Terminado"],
-     datasets:[{data:[p,pr,r,t],
-     backgroundColor:"#0078D4"}]
-   }
- });
-
- let a=[];
- if(alta>5)a.push("⚠️ Muchas tareas críticas");
- if(p>pr)a.push("⚠️ Demasiadas pendientes");
- if(r>pr)a.push("⚠️ Cuello en revisión");
-
- document.getElementById("alertas").innerHTML=
- a.length?a.join("<br>"):"✅ Todo bajo control";
-}
-
-// render tablero
-function render(){
- stats();
- renderDashboard();
-
- let b=document.getElementById("board");
- b.innerHTML="";
-
- COLS.forEach((n,i)=>{
-
- let c=document.createElement("div");
- c.className="col";
-
- c.ondragover=e=>e.preventDefault();
-
- c.ondrop=_=>{
-  if(dragId){
-   db.collection("kanban").doc(dragId)
-   .update({col:i,order:Date.now()});
-   log("Movimiento","Cambio columna");
-   dragId=null;
-  }
- };
-
- let html=cards
- .filter(x=>x.col===i)
- .filter(x=>{
-   let f=document.getElementById("filtro").value;
-   return f==="todos"||x.prioridad===f;
- })
- .sort((a,b)=>{
-   const o={"Alta":1,"Media":2,"Baja":3};
-   return(o[a.prioridad]||2)-(o[b.prioridad]||2);
- })
- .map(x=>`
- <div class='card'
- style="border-left:5px solid ${
- x.prioridad==='Alta'?'red':
- x.prioridad==='Media'?'orange':'green'}"
- draggable='true'
- ondragstart="drag('${x.id}')">
-
- <b>${x.text}</b><br>
- 📅 ${x.date}<br>
- ⚡ ${x.prioridad}<br>
-
- <button onclick="del('${x.id}')">❌</button>
- </div>
- `).join("");
-
- c.innerHTML=`<h3>${n}</h3>${html}<button onclick="add(${i})">+ Agregar</button>`;
- b.appendChild(c);
-
- });
-}
-
-// funciones
-function drag(id){dragId=id}
-
-function add(col){
- let t=prompt("Tarea");
- let p=prompt("Prioridad: Alta / Media / Baja")||"Media";
- p=p.charAt(0).toUpperCase()+p.slice(1).toLowerCase();
-
- if(!t)return;
+ if(!text)return;
 
  db.collection("kanban").add({
-  text:t,
-  date:new Date().toLocaleDateString(),
-  prioridad:p,
-  col,
+  text,
+  prioridad,
+  col:0,
   order:Date.now()
  });
 
- db.collection("actividades").add({
-  text:t,
-  prioridad:p,
-  fecha:new Date()
- });
-
- log(t,"Creado");
+ document.getElementById("txtTarea").value="";
 }
 
-function del(id){
- db.collection("kanban").doc(id).delete();
- log("Eliminado","Borrado");
-}
+// ✅ KPI + DASHBOARD
+function dashboard(){
 
-// export
-function exportHistorial(){
- db.collection("historial").get().then(s=>{
-  let data=[["Acción","Detalle","Fecha"]];
-  s.forEach(d=>{
-   let x=d.data();
-   data.push([x.action,x.text,new Date(x.fecha.seconds*1000)]);
-  });
-  let ws=XLSX.utils.aoa_to_sheet(data);
-  let wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"Movimientos");
-  XLSX.writeFile(wb,"Historial.xlsx");
+ let alta=cards.filter(x=>x.prioridad==="Alta").length;
+ let media=cards.filter(x=>x.prioridad==="Media").length;
+ let baja=cards.filter(x=>x.prioridad==="Baja").length;
+
+ let pendiente=cards.filter(x=>x.col===0).length;
+ let proceso=cards.filter(x=>x.col===1).length;
+ let revision=cards.filter(x=>x.col===2).length;
+ let terminado=cards.filter(x=>x.col===3).length;
+
+ // KPI texto
+ document.getElementById("stats").innerHTML=`
+ Total: ${cards.length} |
+ 🔴 ${alta} |
+ 🟠 ${media} |
+ 🟢 ${baja}
+ `;
+
+ // gráfica prioridad
+ if(chart1)chart1.destroy();
+ chart1=new Chart(chart1canvas,{
+   type:"pie",
+   data:{
+     labels:["Alta","Media","Baja"],
+     datasets:[{
+       data:[alta,media,baja],
+       backgroundColor:["red","orange","green"]
+     }]
+   }
+ });
+
+ // gráfica columnas
+ if(chart2)chart2.destroy();
+ chart2=new Chart(chart2canvas,{
+   type:"bar",
+   data:{
+     labels:["Pendiente","Proceso","Revision","Terminado"],
+     datasets:[{
+       data:[pendiente,proceso,revision,terminado],
+       backgroundColor:"blue"
+     }]
+   }
  });
 }
 
-function exportActividades(){
- db.collection("actividades").get().then(s=>{
-  let data=[["Tarea","Prioridad","Fecha"]];
-  s.forEach(d=>{
-   let x=d.data();
-   data.push([x.text,x.prioridad,new Date(x.fecha.seconds*1000)]);
-  });
-  let ws=XLSX.utils.aoa_to_sheet(data);
-  let wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"Actividades");
-  XLSX.writeFile(wb,"Actividades.xlsx");
+// ✅ RENDER
+function render(){
+
+ dashboard();
+
+ let html="";
+
+ COLS.forEach((c,i)=>{
+
+ html+=`<div class="col"><h3>${c}</h3>`;
+
+ cards
+ .filter(x=>x.col===i)
+ .forEach(x=>{
+
+ html+=`
+ <div class="card" style="border-left:5px solid ${
+   x.prioridad==="Alta"?"red":
+   x.prioridad==="Media"?"orange":"green"
+ }">
+ ${x.text}<br>
+ ${x.prioridad}
+ </div>
+ `;
+
  });
+
+ html+=`</div>`;
+ });
+
+ document.getElementById("board").innerHTML=html;
 }
 
 </script>
 
 </body>
 </html>
-``
