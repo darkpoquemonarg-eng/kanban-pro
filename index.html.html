@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang='es'>
+<head>
+<meta charset='UTF-8'>
+<title>Kanban Corporativo Total</title>
+<style>
+body{font-family:Segoe UI,Arial;background:#eef1f5;margin:0;padding:15px}
+h2{text-align:center}
+.top{display:flex;gap:10px;margin-bottom:15px}
+.stat{background:#fff;padding:10px;border-radius:8px;flex:1;text-align:center;font-weight:bold}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.col{background:#fff;padding:10px;border-radius:10px;min-height:300px}
+.card{background:#fafafa;border-left:5px solid #0078D4;padding:8px;margin-bottom:6px;border-radius:6px;cursor:grab}
+button{margin-top:5px;cursor:pointer}
+ul{font-size:12px}
+</style>
+</head>
+<body>
+
+<h2>🚀 Kanban Corporativo Total</h2>
+<div class='top' id='stats'></div>
+<div class='board' id='board'></div>
+
+<h3>Historial</h3>
+<ul id='hist'></ul>
+
+<script src='https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js'></script>
+<script src='https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js'></script>
+
+<script>
+
+const firebaseConfig = {
+  apiKey: "AIzaSyASsFAKZ5t1YUylzLfQVuDtpzAWnAsCS8g",
+  authDomain: "tablero-kamban.firebaseapp.com",
+  projectId: "tablero-kamban",
+  storageBucket: "tablero-kamban.firebasestorage.app",
+  messagingSenderId: "800501902833",
+  appId: "1:800501902833:web:1d22b317b726f91044e850"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+
+const COLS=["Pendiente","Proceso","Revisión","Terminado"];
+let cards=[]; let dragId=null;
+
+// realtime
+ db.collection("kanban").orderBy("order","asc").onSnapshot(s=>{
+ cards=[]; s.forEach(d=>cards.push({id:d.id,...d.data()})); render();});
+
+ db.collection("historial").orderBy("fecha","desc").onSnapshot(s=>{
+ let h=document.getElementById("hist"); h.innerHTML="";
+ s.forEach(d=>{let x=d.data(); h.innerHTML+=`<li>${x.user||"user"}: ${x.action} - ${x.text}</li>`});});
+
+function log(text,action,user){db.collection("historial").add({text,action,user,fecha:new Date()});}
+
+function stats(){document.getElementById("stats").innerHTML=`
+<div class='stat'>Total ${cards.length}</div>
+<div class='stat'>Proceso ${cards.filter(c=>c.col==1).length}</div>
+<div class='stat'>Terminado ${cards.filter(c=>c.col==3).length}</div>`;}
+
+function render(){stats(); let b=document.getElementById("board"); b.innerHTML="";
+COLS.forEach((n,i)=>{let c=document.createElement("div"); c.className="col";
+c.ondragover=e=>e.preventDefault();
+c.ondrop=_=>{ if(dragId){db.collection("kanban").doc(dragId).update({col:i,order:Date.now()}); log("movida","Movido","usuario"); dragId=null;}}
+
+let html=cards.filter(x=>x.col===i).map(x=>`
+<div class='card' draggable='true' ondragstart="drag('${x.id}')">
+<b>${x.text}</b><br>${x.user||''}<br>${x.date||''}<br>
+<button onclick="del('${x.id}')">❌</button>
+</div>`).join("");
+
+c.innerHTML=`<h3>${n}</h3>${html}<button onclick="add(${i})">+ Agregar</button>`;
+b.appendChild(c);
+});
+}
+
+function drag(id){dragId=id}
+
+function add(col){
+let t=prompt("Tarea");
+let u=prompt("Usuario");
+if(!t)return;
+db.collection("kanban").add({text:t,user:u,date:new Date().toLocaleDateString(),col,order:Date.now()});
+log(t,"Creado",u);
+}
+
+function del(id){db.collection("kanban").doc(id).delete(); log("eliminada","Eliminado","usuario");}
+</script>
+</body></html>
