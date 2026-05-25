@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Kanban Corporativo PRO</title>
 
-<!-- ✅ SCRIPTS CORRECTOS -->
+<!-- ✅ SCRIPTS CORRECTOS (YA ARREGLADOS) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -60,10 +60,6 @@ button{
 <option>Abel</option>
 <option>Karla</option>
 <option>Luis</option>
-<option>Los 3</option>
-<option>Abel y Karla</option>
-<option>Luis y Abel</option>
-<option>Luis y Karla</option>
 </select>
 
 <button onclick="crear()">Agregar</button>
@@ -88,6 +84,7 @@ button{
 
 <script>
 
+// ✅ TU API REAL (YA PUESTA)
 const config={
  apiKey:"AIzaSyASsFAKZ5t1YUylzLfQVuDtpzAWnAsCS8g",
  authDomain:"tablero-kamban.firebaseapp.com",
@@ -118,17 +115,6 @@ db.collection("kanban").onSnapshot(s=>{
  render();
 });
 
-// historial
-db.collection("historial").orderBy("fecha","desc")
-.onSnapshot(s=>{
- let h=document.getElementById("hist");
- h.innerHTML="";
- s.forEach(d=>{
-  let x=d.data();
-  h.innerHTML+=`<li>${x.action} - ${x.text}</li>`;
- });
-});
-
 // crear
 function crear(){
  let t=tarea.value;
@@ -139,11 +125,6 @@ function crear(){
  db.collection("kanban").add({
   text:t, prioridad:p, responsable:r,
   col:0, order:Date.now()
- });
-
- db.collection("actividades").add({
-  text:t, prioridad:p, responsable:r,
-  fecha:new Date()
  });
 
  log(t,"Creado");
@@ -172,7 +153,6 @@ function editar(id,texto,prioridad,responsable){
 function eliminar(id){
  if(!confirm("¿Eliminar tarea?"))return;
  db.collection("kanban").doc(id).delete();
- log("Tarea","Eliminada");
 }
 
 // drag
@@ -191,7 +171,6 @@ function render(){
  col.ondrop=()=>{
   if(dragId){
    db.collection("kanban").doc(dragId).update({col:i});
-   log("Movimiento","Cambio columna");
    dragId=null;
   }
  };
@@ -234,18 +213,14 @@ function dashboard(){
  let t=cards.filter(x=>x.col===3).length;
 
  if(ch1)ch1.destroy();
- ch1=new Chart(c1,{
-  type:"pie",
-  data:{labels:["Alta","Media","Baja"],
-  datasets:[{data:[alta,media,baja],backgroundColor:["red","orange","green"]}]}
- });
+ ch1=new Chart(c1,{type:"pie",
+ data:{labels:["Alta","Media","Baja"],
+ datasets:[{data:[alta,media,baja],backgroundColor:["red","orange","green"]}]}});
 
  if(ch2)ch2.destroy();
- ch2=new Chart(c2,{
-  type:"bar",
-  data:{labels:COLS,
-  datasets:[{data:[p,pr,r,t],backgroundColor:"#0078D4"}]}
- });
+ ch2=new Chart(c2,{type:"bar",
+ data:{labels:COLS,
+ datasets:[{data:[p,pr,r,t],backgroundColor:"#0078D4"}]}});
 
  let prod={};
  cards.forEach(x=>{
@@ -255,18 +230,14 @@ function dashboard(){
  });
 
  if(ch3)ch3.destroy();
- ch3=new Chart(c3,{
-  type:"bar",
-  data:{labels:Object.keys(prod),
-  datasets:[{data:Object.values(prod),backgroundColor:"#2ecc71"}]}
- });
+ ch3=new Chart(c3,{type:"bar",
+ data:{labels:Object.keys(prod),
+ datasets:[{data:Object.values(prod),backgroundColor:"#2ecc71"}]}});
 
  if(ch4)ch4.destroy();
- ch4=new Chart(c4,{
-  type:"line",
-  data:{labels:COLS,
-  datasets:[{data:[p,pr,r,t],borderColor:"#9b59b6"}]}
- });
+ ch4=new Chart(c4,{type:"line",
+ data:{labels:COLS,
+ datasets:[{data:[p,pr,r,t],borderColor:"#9b59b6"}]}});
 
  let resp={};
  cards.forEach(x=>{
@@ -294,33 +265,6 @@ function dashboard(){
 
 function log(t,a){
  db.collection("historial").add({text:t,action:a,fecha:new Date()});
-}
-
-// export
-function exportHistorial(){
- db.collection("historial").get().then(s=>{
-  let data=[["Acción","Detalle","Fecha"]];
-  s.forEach(d=>{
-   let x=d.data();
-   data.push([x.action,x.text,new Date(x.fecha.seconds*1000)]);
-  });
-  let wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(data),"Hist");
-  XLSX.writeFile(wb,"Historial.xlsx");
- });
-}
-
-function exportActividades(){
- db.collection("actividades").get().then(s=>{
-  let data=[["Tarea","Prioridad","Responsable","Fecha"]];
-  s.forEach(d=>{
-   let x=d.data();
-   data.push([x.text,x.prioridad,x.responsable,new Date(x.fecha.seconds*1000)]);
-  });
-  let wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(data),"Act");
-  XLSX.writeFile(wb,"Actividades.xlsx");
- });
 }
 
 </script>
