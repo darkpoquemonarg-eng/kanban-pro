@@ -4,39 +4,111 @@
 <meta charset="UTF-8">
 <title>Kanban Corporativo PRO</title>
 
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- Excel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Dashboard -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body{font-family:Segoe UI;background:#eef1f5;padding:15px}
-.board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.col{background:#fff;padding:10px;border-radius:10px}
-.card{background:#fafafa;padding:8px;margin-bottom:6px;border-radius:6px}
+
+h2{text-align:center}
+
+/* Dashboard */
+.dashboard{
+ display:flex;
+ gap:20px;
+ justify-content:center;
+ flex-wrap:wrap;
+ margin-bottom:20px;
+}
+
+.chart-box{
+ width:350px;
+ height:250px;
+ background:white;
+ padding:10px;
+ border-radius:10px;
+}
+
+/* KPIs */
+.stats{
+ display:flex;
+ gap:10px;
+ margin-bottom:15px;
+}
+.stat{
+ background:white;
+ padding:10px;
+ border-radius:8px;
+ flex:1;
+ text-align:center;
+ font-weight:bold;
+}
+
+/* Kanban */
+.board{
+ display:grid;
+ grid-template-columns:repeat(4,1fr);
+ gap:10px;
+}
+.col{
+ background:#fff;
+ padding:10px;
+ border-radius:10px;
+ min-height:250px;
+}
+
+.card{
+ background:#fafafa;
+ padding:8px;
+ margin-bottom:6px;
+ border-radius:6px;
+ transition:0.2s;
+}
+.card:hover{transform:scale(1.03)}
+
+button{margin-top:5px}
 </style>
+
 </head>
 
 <body>
 
 <h2>🚀 Kanban Corporativo PRO</h2>
 
-<!-- FORMULARIO REAL -->
-<input id="txtTarea" placeholder="Tarea">
-<select id="selPrioridad">
+<!-- FORMULARIO -->
+<input id="txtTarea" placeholder="Nueva tarea">
+<select id="prioridad">
   <option value="Alta">🔴 Alta</option>
   <option value="Media" selected>🟠 Media</option>
   <option value="Baja">🟢 Baja</option>
 </select>
 <button onclick="crear()">Agregar</button>
 
-<h3>📊 Dashboard</h3>
-<canvas id="chart1"></canvas>
-<canvas id="chart2"></canvas>
+<br><br>
 
-<div id="stats"></div>
+<button onclick="exportHistorial()">📥 Movimientos</button>
+<button onclick="exportActividades()">📊 Actividades</button>
 
-<div id="board" class="board"></div>
+<!-- DASHBOARD -->
+<div class="dashboard">
+  <div class="chart-box"><canvas id="chart1"></canvas></div>
+  <div class="chart-box"><canvas id="chart2"></canvas></div>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<!-- TABLERO -->
+<div class="board" id="board"></div>
+
+<h3>Historial</h3>
+<ul id="hist"></ul>
 
 <script>
 
@@ -61,10 +133,21 @@ db.collection("kanban").onSnapshot(s=>{
  render();
 });
 
-// ✅ CREAR TAREA (sin errores)
+// 📝 historial
+db.collection("historial").orderBy("fecha","desc").onSnapshot(s=>{
+ let h=document.getElementById("hist");
+ h.innerHTML="";
+ s.forEach(d=>{
+  let x=d.data();
+  h.innerHTML+=`<li>${x.action} - ${x.text}</li>`;
+ });
+});
+
+// ✅ CREAR TAREA CORRECTO
 function crear(){
+
  const text=document.getElementById("txtTarea").value;
- const prioridad=document.getElementById("selPrioridad").value;
+ const prioridad=document.getElementById("prioridad").value;
 
  if(!text)return;
 
@@ -72,13 +155,31 @@ function crear(){
   text,
   prioridad,
   col:0,
+  fecha:new Date(),
   order:Date.now()
  });
+
+ db.collection("actividades").add({
+  text,
+  prioridad,
+  fecha:new Date()
+ });
+
+ log(text,"Creado");
 
  document.getElementById("txtTarea").value="";
 }
 
-// ✅ KPI + DASHBOARD
+// ✅ LOG
+function log(text,action){
+ db.collection("historial").add({
+  text,
+  action,
+  fecha:new Date()
+ });
+}
+
+// ✅ DASHBOARD
 function dashboard(){
 
  let alta=cards.filter(x=>x.prioridad==="Alta").length;
@@ -90,38 +191,40 @@ function dashboard(){
  let revision=cards.filter(x=>x.col===2).length;
  let terminado=cards.filter(x=>x.col===3).length;
 
- // KPI texto
+ // KPI
  document.getElementById("stats").innerHTML=`
- Total: ${cards.length} |
- 🔴 ${alta} |
- 🟠 ${media} |
- 🟢 ${baja}
+ <div class="stat">Total ${cards.length}</div>
+ <div class="stat">🔴 ${alta}</div>
+ <div class="stat">🟠 ${media}</div>
+ <div class="stat">🟢 ${baja}</div>
  `;
 
  // gráfica prioridad
  if(chart1)chart1.destroy();
- chart1=new Chart(chart1canvas,{
-   type:"pie",
-   data:{
-     labels:["Alta","Media","Baja"],
-     datasets:[{
-       data:[alta,media,baja],
-       backgroundColor:["red","orange","green"]
-     }]
-   }
+ chart1=new Chart(document.getElementById("chart1"),{
+  type:"pie",
+  data:{
+   labels:["Alta","Media","Baja"],
+   datasets:[{
+    data:[alta,media,baja],
+    backgroundColor:["red","orange","green"]
+   }]
+  },
+  options:{responsive:true,maintainAspectRatio:false}
  });
 
  // gráfica columnas
  if(chart2)chart2.destroy();
- chart2=new Chart(chart2canvas,{
-   type:"bar",
-   data:{
-     labels:["Pendiente","Proceso","Revision","Terminado"],
-     datasets:[{
-       data:[pendiente,proceso,revision,terminado],
-       backgroundColor:"blue"
-     }]
-   }
+ chart2=new Chart(document.getElementById("chart2"),{
+  type:"bar",
+  data:{
+   labels:["Pendiente","Proceso","Revision","Terminado"],
+   datasets:[{
+    data:[pendiente,proceso,revision,terminado],
+    backgroundColor:"#0078D4"
+   }]
+  },
+  options:{responsive:true,maintainAspectRatio:false}
  });
 }
 
@@ -141,12 +244,14 @@ function render(){
  .forEach(x=>{
 
  html+=`
- <div class="card" style="border-left:5px solid ${
-   x.prioridad==="Alta"?"red":
-   x.prioridad==="Media"?"orange":"green"
+ <div class="card"
+ style="border-left:5px solid ${
+  x.prioridad==="Alta"?"red":
+  x.prioridad==="Media"?"orange":"green"
  }">
- ${x.text}<br>
- ${x.prioridad}
+
+ <b>${x.text}</b><br>
+ ⚡ ${x.prioridad}
  </div>
  `;
 
@@ -156,6 +261,46 @@ function render(){
  });
 
  document.getElementById("board").innerHTML=html;
+}
+
+// 📥 EXPORTAR MOVIMIENTOS
+function exportHistorial(){
+ db.collection("historial").get().then(s=>{
+  let data=[["Acción","Detalle","Fecha"]];
+  s.forEach(d=>{
+   let x=d.data();
+   data.push([
+    x.action,
+    x.text,
+    new Date(x.fecha.seconds*1000)
+   ]);
+  });
+
+  let ws=XLSX.utils.aoa_to_sheet(data);
+  let wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Movimientos");
+  XLSX.writeFile(wb,"Historial.xlsx");
+ });
+}
+
+// 📊 EXPORTAR ACTIVIDADES
+function exportActividades(){
+ db.collection("actividades").get().then(s=>{
+  let data=[["Actividad","Prioridad","Fecha"]];
+  s.forEach(d=>{
+   let x=d.data();
+   data.push([
+    x.text,
+    x.prioridad,
+    new Date(x.fecha.seconds*1000)
+   ]);
+  });
+
+  let ws=XLSX.utils.aoa_to_sheet(data);
+  let wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Actividades");
+  XLSX.writeFile(wb,"Base_Actividades.xlsx");
+ });
 }
 
 </script>
