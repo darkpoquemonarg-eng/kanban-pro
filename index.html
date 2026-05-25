@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Kanban PRO</title>
+<title>Kanban PRO Ejecutivo</title>
 
 <!-- ✅ SCRIPTS CORRECTOS -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -24,6 +24,7 @@ h2{text-align:center}
  margin:8px;
  border-radius:8px;
  box-shadow:0 2px 5px rgba(0,0,0,0.1);
+ cursor:grab;
 }
 
 .dashboard{display:flex;gap:15px;flex-wrap:wrap}
@@ -32,12 +33,14 @@ h2{text-align:center}
  width:300px;height:220px;
  background:white;padding:10px;border-radius:10px
 }
+
+button{margin:3px}
 </style>
 </head>
 
 <body>
 
-<h2>🚀 Kanban PRO</h2>
+<h2>🚀 Kanban PRO Ejecutivo</h2>
 
 <input id="tarea" placeholder="Nueva tarea">
 
@@ -55,7 +58,7 @@ h2{text-align:center}
 
 <button onclick="crear()">Agregar</button>
 <button onclick="exportExcel()">📥 Excel</button>
-<button onclick="exportPDF()">📄 PDF</button>
+<button onclick="exportReportePro()">📊 Reporte Ejecutivo</button>
 
 <!-- DASHBOARD -->
 <div class="dashboard">
@@ -70,6 +73,7 @@ h2{text-align:center}
 
 <script>
 
+// ✅ FIREBASE
 const config={
  apiKey:"AIzaSyASsFAKZ5t1YUylzLfQVuDtpzAWnAsCS8g",
  authDomain:"tablero-kamban.firebaseapp.com",
@@ -84,7 +88,7 @@ const COLS=["Pendiente","Proceso","Revision","Terminado"];
 let cards=[],dragId=null;
 let ch1,ch2,ch3,ch4,ch5;
 
-// realtime
+// 🔄 realtime
 db.collection("kanban").onSnapshot(s=>{
  cards=[];
  s.forEach(d=>{
@@ -100,26 +104,28 @@ db.collection("kanban").onSnapshot(s=>{
  render();
 });
 
-// crear
+// ✅ crear
 function crear(){
  if(!tarea.value)return;
+
  db.collection("kanban").add({
   text:tarea.value,
   prioridad:prioridad.value,
   responsable:responsable.value,
   col:0
  });
+
  tarea.value="";
 }
 
-// editar
+// ✏️ editar
 function editar(id,t){
  let nt=prompt("Editar",t);
  if(!nt)return;
  db.collection("kanban").doc(id).update({text:nt});
 }
 
-// eliminar
+// 🗑 eliminar
 function eliminar(id){
  if(confirm("Eliminar?")){
   db.collection("kanban").doc(id).delete();
@@ -161,7 +167,8 @@ function render(){
   "✅";
 
  col.innerHTML+=`
- <div class="card" draggable="true"
+ <div class="card"
+ draggable="true"
  ondragstart="drag('${x.id}')"
  style="border-left:6px solid ${color}">
 
@@ -181,7 +188,7 @@ function render(){
  dashboard();
 }
 
-// dashboard
+// 📊 dashboard
 function dashboard(){
 
  let alta=cards.filter(x=>x.prioridad==="Alta").length;
@@ -218,7 +225,6 @@ function dashboard(){
   }
  });
 
- // productividad
  let prod={};
  cards.forEach(x=>{
   if(x.col===3){
@@ -253,7 +259,7 @@ function dashboard(){
  let resp={};
  cards.forEach(x=>{
   if(!resp[x.responsable]){
-    resp[x.responsable]={Alta:0,Media:0,Baja:0};
+   resp[x.responsable]={Alta:0,Media:0,Baja:0};
   }
   resp[x.responsable][x.prioridad]++;
  });
@@ -274,7 +280,7 @@ function dashboard(){
  });
 }
 
-// 📥 Excel
+// 📥 EXCEL
 function exportExcel(){
 
  let data=[["Tarea","Responsable","Prioridad","Estado"]];
@@ -285,34 +291,53 @@ function exportExcel(){
 
  let ws=XLSX.utils.aoa_to_sheet(data);
  let wb=XLSX.utils.book_new();
-
  XLSX.utils.book_append_sheet(wb,ws,"Kanban");
 
  XLSX.writeFile(wb,"Tareas.xlsx");
 }
 
-// 📄 PDF
-async function exportPDF(){
+// 📊 REPORTE PRO
+async function exportReportePro(){
 
  const { jsPDF } = window.jspdf;
  const pdf = new jsPDF();
 
+ let fecha = new Date().toLocaleDateString();
+
+ let total = cards.length;
+ let terminadas = cards.filter(x=>x.col===3).length;
+ let proceso = cards.filter(x=>x.col===1).length;
+
+ let eficiencia = total? (terminadas/total*100).toFixed(1):0;
+
+ pdf.setFontSize(18);
+ pdf.text("REPORTE EJECUTIVO KANBAN",20,20);
+
+ pdf.setFontSize(11);
+ pdf.text("Fecha: "+fecha,20,30);
+
+ pdf.text("Total tareas: "+total,20,50);
+ pdf.text("Terminadas: "+terminadas,20,60);
+ pdf.text("% Eficiencia: "+eficiencia+"%",20,70);
+ pdf.text("En proceso: "+proceso,20,80);
+
  let charts=["c1","c2","c3","c4","c5"];
 
  for(let i=0;i<charts.length;i++){
+
   let canvas=document.getElementById(charts[i]);
   let img=canvas.toDataURL("image/png");
 
-  if(i!==0) pdf.addPage();
-
-  pdf.text("Grafica "+(i+1),10,10);
-  pdf.addImage(img,"PNG",10,20,180,100);
+  pdf.addPage();
+  pdf.text("Grafica "+(i+1),20,15);
+  pdf.addImage(img,"PNG",10,25,180,110);
  }
 
- pdf.save("Dashboard_Kanban.pdf");
+ pdf.save("Reporte_Ejecutivo.pdf");
 }
 
 </script>
 
 </body>
 </html>
+``
