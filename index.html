@@ -1,7 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Kanban Corporativo PRO</title>
+
+<!-- ✅ SCRIPTS CORRECTOS -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{font-family:Segoe UI;background:#eef1f5;padding:15px}
+h2{text-align:center}
+
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.col{background:white;padding:10px;border-radius:10px;min-height:250px}
+
+.card{
+background:#fafafa;
+padding:8px;
+margin-bottom:6px;
+border-radius:6px;
+cursor:grab;
+}
+
+.dashboard{display:flex;gap:20px;flex-wrap:wrap}
+.chart-box{width:300px;height:220px;background:white;padding:10px;border-radius:10px}
+</style>
+</head>
+
+<body>
+
+<h2>🚀 Kanban Corporativo PRO</h2>
+
+<input id="tarea" placeholder="Nueva tarea">
+
+<select id="prioridad">
+<option>Alta</option>
+<option selected>Media</option>
+<option>Baja</option>
+</select>
+
+<select id="responsable">
+<option>Abel</option>
+<option>Karla</option>
+<option>Luis</option>
+<option>Los 3</option>
+<option>Abel y Karla</option>
+<option>Luis y Abel</option>
+<option>Luis y Karla</option>
+</select>
+
+<button onclick="crear()">Agregar</button>
+
+<br><br>
+
+<button onclick="exportHistorial()">📥 Movimientos</button>
+<button onclick="exportActividades()">📊 Actividades</button>
+
+<div class="dashboard">
+<div class="chart-box"><canvas id="c1"></canvas></div>
+<div class="chart-box"><canvas id="c2"></canvas></div>
+</div>
+
+<div id="board" class="board"></div>
+
+<h3>Historial</h3>
+<ul id="hist"></ul>
+
 <script>
 
 const config={
- apiKey:"TU_API_KEY",
+ apiKey:"AIzaSyASsFAKZ5t1YUylzLfQVuDtpzAWnAsCS8g",
  authDomain:"tablero-kamban.firebaseapp.com",
  projectId:"tablero-kamban"
 };
@@ -9,18 +80,17 @@ const config={
 firebase.initializeApp(config);
 const db=firebase.firestore();
 
-let cards = [];
-let dragId = null;
-
 const COLS=["Pendiente","Proceso","Revision","Terminado"];
 
-// 🔄 REALTIME
+let cards=[], dragId=null;
+let ch1,ch2;
+
+// 🔄 realtime
 db.collection("kanban").onSnapshot(s=>{
  cards=[];
  s.forEach(d=>{
-   let data = d.data();
+   let data=d.data();
 
-   // ✅ FORZAR VALORES LIMPIOS
    cards.push({
      id:d.id,
      text:data.text,
@@ -29,94 +99,165 @@ db.collection("kanban").onSnapshot(s=>{
      col:data.col ?? 0
    });
  });
-
  render();
 });
 
+// historial
+db.collection("historial").orderBy("fecha","desc").onSnapshot(s=>{
+ let h=document.getElementById("hist");
+ h.innerHTML="";
+ s.forEach(d=>{
+  let x=d.data();
+  h.innerHTML+=`<li>${x.action} - ${x.text}</li>`;
+ });
+});
 
-// ✅ DRAG FUNCIONA SIEMPRE
-function drag(id){
- dragId = id;
+// crear
+function crear(){
+ let t=document.getElementById("tarea").value;
+ let p=document.getElementById("prioridad").value;
+ let r=document.getElementById("responsable").value;
+
+ if(!t)return;
+
+ db.collection("kanban").add({
+  text:t,
+  prioridad:p,
+  responsable:r,
+  col:0,
+  order:Date.now()
+ });
+
+ db.collection("actividades").add({
+  text:t,
+  prioridad:p,
+  responsable:r,
+  fecha:new Date()
+ });
+
+ log(t,"Creado");
+ document.getElementById("tarea").value="";
 }
 
+// drag
+function drag(id){dragId=id}
 
-// ✅ RENDER CORREGIDO
+// render
 function render(){
 
- let board = document.getElementById("board");
- board.innerHTML="";
+ let b=document.getElementById("board");
+ b.innerHTML="";
 
- COLS.forEach((nombre,colIndex)=>{
+ COLS.forEach((c,i)=>{
 
- let column = document.createElement("div");
- column.className="col";
+ let col=document.createElement("div");
+ col.className="col";
 
- // ✅ Permitir arrastrar
- column.ondragover = e => e.preventDefault();
+ col.ondragover=e=>e.preventDefault();
 
- // ✅ SOLTAR TARJETA
- column.ondrop = ()=>{
-   if(dragId){
-
-     db.collection("kanban").doc(dragId).update({
-       col: colIndex,
-       order: Date.now()
-     });
-
-     dragId = null;
-   }
+ col.ondrop=()=>{
+  if(dragId){
+   db.collection("kanban").doc(dragId).update({col:i});
+   log("Movimiento","Cambio columna");
+   dragId=null;
+  }
  };
 
- column.innerHTML = `<h3>${nombre}</h3>`;
+ col.innerHTML=`<h3>${c}</h3>`;
 
- // ✅ TARJETAS
- cards.filter(c=>c.col===colIndex).forEach(c=>{
+ cards.filter(x=>x.col===i).forEach(x=>{
 
- column.innerHTML += `
+ col.innerHTML+=`
  <div class="card"
  draggable="true"
- ondragstart="drag('${c.id}')"
+ ondragstart="drag('${x.id}')"
  style="border-left:5px solid ${
-   c.prioridad==="Alta"?"red":
-   c.prioridad==="Media"?"orange":"green"
+  x.prioridad==='Alta'?'red':
+  x.prioridad==='Media'?'orange':'green'
  }">
 
- <b>${c.text}</b><br>
-
- 👤 ${c.responsable}<br>
-
- ⚡ ${c.prioridad}
+ <b>${x.text}</b><br>
+ 👤 ${x.responsable}<br>
+ ⚡ ${x.prioridad}
 
  </div>
  `;
  });
 
- board.appendChild(column);
-
+ b.appendChild(col);
  });
 
+ dashboard();
 }
 
+// dashboard
+function dashboard(){
 
-// ✅ CREAR TAREA (CORREGIDO)
-function crear(){
+ let alta=cards.filter(x=>x.prioridad==="Alta").length;
+ let media=cards.filter(x=>x.prioridad==="Media").length;
+ let baja=cards.filter(x=>x.prioridad==="Baja").length;
 
- let text = document.getElementById("tarea").value;
- let prioridad = document.getElementById("prioridad").value;
- let responsable = document.getElementById("responsable").value;
+ let p=cards.filter(x=>x.col===0).length;
+ let pr=cards.filter(x=>x.col===1).length;
+ let r=cards.filter(x=>x.col===2).length;
+ let t=cards.filter(x=>x.col===3).length;
 
- if(!text)return;
-
- db.collection("kanban").add({
-   text,
-   prioridad,
-   responsable,
-   col:0,
-   order:Date.now()
+ if(ch1)ch1.destroy();
+ ch1=new Chart(document.getElementById("c1"),{
+  type:"pie",
+  data:{
+   labels:["Alta","Media","Baja"],
+   datasets:[{data:[alta,media,baja],backgroundColor:["red","orange","green"]}]
+  },
+  options:{responsive:true,maintainAspectRatio:false}
  });
 
- document.getElementById("tarea").value="";
+ if(ch2)ch2.destroy();
+ ch2=new Chart(document.getElementById("c2"),{
+  type:"bar",
+  data:{
+   labels:["Pendiente","Proceso","Revision","Terminado"],
+   datasets:[{data:[p,pr,r,t],backgroundColor:"#0078D4"}]
+  },
+  options:{responsive:true,maintainAspectRatio:false}
+ });
+}
+
+function log(t,a){
+ db.collection("historial").add({text:t,action:a,fecha:new Date()});
+}
+
+// export excel
+function exportHistorial(){
+ db.collection("historial").get().then(s=>{
+  let data=[["Acción","Detalle","Fecha"]];
+  s.forEach(d=>{
+   let x=d.data();
+   data.push([x.action,x.text,new Date(x.fecha.seconds*1000)]);
+  });
+  let ws=XLSX.utils.aoa_to_sheet(data);
+  let wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Mov");
+  XLSX.writeFile(wb,"Historial.xlsx");
+ });
+}
+
+function exportActividades(){
+ db.collection("actividades").get().then(s=>{
+  let data=[["Tarea","Prioridad","Responsable","Fecha"]];
+  s.forEach(d=>{
+   let x=d.data();
+   data.push([x.text,x.prioridad,x.responsable,new Date(x.fecha.seconds*1000)]);
+  });
+  let ws=XLSX.utils.aoa_to_sheet(data);
+  let wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Act");
+  XLSX.writeFile(wb,"Actividades.xlsx");
+ });
 }
 
 </script>
+
+</body>
+</html>
 ``
