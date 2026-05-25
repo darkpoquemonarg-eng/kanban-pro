@@ -4,10 +4,9 @@
 <meta charset="UTF-8">
 <title>Kanban Corporativo PRO</title>
 
-<!-- ✅ SCRIPTS BIEN PUESTOS -->
+<!-- ✅ SCRIPTS CORRECTOS -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -17,15 +16,21 @@ h2{text-align:center}
 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .col{background:white;padding:10px;border-radius:10px;min-height:250px}
 
-.card{background:#fafafa;padding:8px;margin:6px;border-radius:6px}
-button{margin:3px}
+.card{
+ background:#fafafa;
+ padding:8px;
+ margin:6px;
+ border-radius:6px;
+}
+
+button{margin:3px;cursor:pointer}
+
+.dashboard{display:flex;gap:15px;flex-wrap:wrap}
 
 .chart-box{
  width:300px;height:220px;
  background:white;border-radius:10px;padding:10px
 }
-
-.dashboard{display:flex;gap:10px;flex-wrap:wrap}
 </style>
 </head>
 
@@ -33,23 +38,11 @@ button{margin:3px}
 
 <h2>🚀 Kanban Corporativo PRO</h2>
 
-<!-- LOGIN -->
-<div id="loginBox">
- <input id="email" placeholder="Email"><br><br>
- <input id="pass" type="password" placeholder="Password"><br><br>
- <button onclick="login()">Entrar</button>
- <button onclick="register()">Registrar</button>
-</div>
-
-<button id="logoutBtn" onclick="logout()" style="display:none">Salir</button>
-
-<br><br>
-
 <input id="tarea" placeholder="Nueva tarea">
 
 <select id="prioridad">
 <option>Alta</option>
-<option>Media</option>
+<option selected>Media</option>
 <option>Baja</option>
 </select>
 
@@ -60,19 +53,22 @@ button{margin:3px}
 </select>
 
 <button onclick="crear()">Agregar</button>
-<button onclick="limpiarBase()">🧹 Limpiar</button>
+<button onclick="limpiarBase()">🧹 Limpiar datos</button>
 
 <!-- KPI -->
-<h3>KPI</h3>
+<h3>KPI Calidad</h3>
 <p id="k1"></p>
 <p id="k2"></p>
+<p id="k3"></p>
 
+<!-- DASHBOARD -->
 <div class="dashboard">
  <div class="chart-box"><canvas id="c1"></canvas></div>
  <div class="chart-box"><canvas id="c2"></canvas></div>
 </div>
 
-<div id="board"></div>
+<!-- TABLERO -->
+<div id="board" class="board"></div>
 
 <script>
 
@@ -85,123 +81,143 @@ const config={
 
 firebase.initializeApp(config);
 const db=firebase.firestore();
-const auth=firebase.auth();
 
 let cards=[];
+let ch1, ch2;
 
-// LOGIN
-auth.onAuthStateChanged(user=>{
- if(user){
-  loginBox.style.display="none";
-  logoutBtn.style.display="block";
-  load();
- }else{
-  loginBox.style.display="block";
-  logoutBtn.style.display="none";
- }
-});
+const COLS=["Pendiente","Proceso","Revision","Terminado"];
 
-function login(){auth.signInWithEmailAndPassword(email.value,pass.value);}
-function register(){auth.createUserWithEmailAndPassword(email.value,pass.value);}
-function logout(){auth.signOut();}
-
-// CLEAN
+// ✅ LIMPIAR BASE (quita undefined)
 function limpiarBase(){
  db.collection("kanban").get().then(s=>{
-  s.forEach(d=>{
-   let x=d.data();
-   db.collection("kanban").doc(d.id).update({
-    text:x.text||"Tarea",
-    prioridad:x.prioridad||"Media",
-    responsable:x.responsable||"Sin asignar",
-    col:x.col??0
+  s.forEach(doc=>{
+   let d=doc.data();
+   db.collection("kanban").doc(doc.id).update({
+    text:d.text||"Tarea",
+    prioridad:d.prioridad||"Media",
+    responsable:d.responsable||"Sin asignar",
+    col:d.col??0
    });
   });
-  alert("Limpio ✅");
+  alert("Base limpiada ✅");
  });
 }
 
-// LOAD
-function load(){
- db.collection("kanban").onSnapshot(s=>{
-  cards=[];
-  s.forEach(d=>{
-   let x=d.data();
-   cards.push({
-    id:d.id,
-    text:x.text||"Tarea",
-    prioridad:x.prioridad||"Media",
-    responsable:x.responsable||"Sin asignar",
-    col:x.col??0
-   });
-  });
-  render();
- });
-}
+// ✅ CARGA DE DATOS
+db.collection("kanban").onSnapshot(s=>{
+ cards=[];
+ s.forEach(d=>{
+  let x=d.data();
 
-// CRUD
+  cards.push({
+   id:d.id,
+   text:x.text||"Tarea",
+   prioridad:x.prioridad||"Media",
+   responsable:x.responsable||"Sin asignar",
+   col:x.col??0
+  });
+ });
+
+ render();
+});
+
+// ✅ CREAR
 function crear(){
- if(!tarea.value)return;
+ if(!tarea.value){
+  alert("Escribe una tarea");
+  return;
+ }
+
  db.collection("kanban").add({
   text:tarea.value,
   prioridad:prioridad.value,
   responsable:responsable.value,
   col:0
  });
+
  tarea.value="";
 }
 
+// ✅ ELIMINAR
 function eliminar(id){
- if(confirm("Eliminar?")){
+ if(confirm("Eliminar tarea?")){
   db.collection("kanban").doc(id).delete();
  }
 }
 
-// RENDER
+// ✅ RENDER
 function render(){
 
  board.innerHTML="";
- let cols=["Pendiente","Proceso","Revision","Terminado"];
 
- cols.forEach((c,i)=>{
- let col=document.createElement("div");
- col.innerHTML="<b>"+c+"</b>";
+ COLS.forEach((c,i)=>{
+  let col=document.createElement("div");
+  col.className="col";
 
- cards.filter(x=>x.col===i).forEach(x=>{
- col.innerHTML+=`
- <div class='card'>
- ${x.text}<br>
- ${x.responsable}<br>
- ${x.prioridad}
- <button onclick="eliminar('${x.id}')">X</button>
- </div>`;
- });
+  col.innerHTML=`<h3>${c}</h3>`;
 
- board.appendChild(col);
+  cards.filter(x=>x.col===i).forEach(x=>{
+
+   col.innerHTML+=`
+   <div class="card">
+    <b>${x.text}</b><br>
+    👤 ${x.responsable}<br>
+    ⚡ ${x.prioridad}
+    <br>
+    <button onclick="eliminar('${x.id}')">🗑️</button>
+   </div>
+   `;
+  });
+
+  board.appendChild(col);
  });
 
  dashboard();
 }
 
-// DASHBOARD
+// ✅ DASHBOARD + KPI
 function dashboard(){
 
- let total=cards.length;
- let fin=cards.filter(x=>x.col===3).length;
+ let total = cards.length;
+ let terminadas = cards.filter(x=>x.col===3).length;
+ let proceso = cards.filter(x=>x.col===1).length;
 
- k1.innerText="Total tareas: "+total;
- k2.innerText="% terminadas: "+(total?(fin/total*100).toFixed(1):0)+"%";
+ document.getElementById("k1").innerText = "Total tareas: " + total;
+ document.getElementById("k2").innerText = "% Terminadas: " + (total?(terminadas/total*100).toFixed(1):0)+"%";
+ document.getElementById("k3").innerText = "% En proceso: " + (total?(proceso/total*100).toFixed(1):0)+"%";
 
- new Chart(c1,{
+ // PRIORIDAD
+ let alta = cards.filter(x=>x.prioridad==="Alta").length;
+ let media = cards.filter(x=>x.prioridad==="Media").length;
+ let baja = cards.filter(x=>x.prioridad==="Baja").length;
+
+ if(ch1) ch1.destroy();
+ ch1 = new Chart(c1,{
   type:"pie",
   data:{
    labels:["Alta","Media","Baja"],
    datasets:[{
-    data:[
-     cards.filter(x=>x.prioridad=="Alta").length,
-     cards.filter(x=>x.prioridad=="Media").length,
-     cards.filter(x=>x.prioridad=="Baja").length
-    ]
+    data:[alta,media,baja],
+    backgroundColor:["red","orange","green"]
+   }]
+  }
+ });
+
+ // ESTADO
+ let p = cards.filter(x=>x.col===0).length;
+ let pr = cards.filter(x=>x.col===1).length;
+ let r = cards.filter(x=>x.col===2).length;
+ let t = cards.filter(x=>x.col===3).length;
+
+ if(ch2) ch2.destroy();
+ ch2 = new Chart(c2,{
+  type:"bar",
+  data:{
+   labels:COLS,
+   datasets:[{
+    label:"Tareas",
+    data:[p,pr,r,t],
+    backgroundColor:"#0078D4"
    }]
   }
  });
