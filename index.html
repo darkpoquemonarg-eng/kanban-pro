@@ -9,30 +9,29 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body{font-family:Segoe UI;background:#eef1f5;padding:15px}
 h2{text-align:center}
 
 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.col{background:white;padding:10px;border-radius:10px;min-height:250px}
+.col{background:white;padding:10px;border-radius:10px}
 
 .card{
  background:#fff;
  padding:10px;
- margin:8px 0;
+ margin:8px;
  border-radius:8px;
  box-shadow:0 2px 5px rgba(0,0,0,0.1);
- cursor:grab;
 }
 
 .dashboard{display:flex;gap:15px;flex-wrap:wrap}
+
 .chart-box{
  width:300px;height:220px;
  background:white;padding:10px;border-radius:10px
 }
-
-button{margin:3px;cursor:pointer}
 </style>
 </head>
 
@@ -56,6 +55,7 @@ button{margin:3px;cursor:pointer}
 
 <button onclick="crear()">Agregar</button>
 <button onclick="exportExcel()">📥 Excel</button>
+<button onclick="exportPDF()">📄 PDF</button>
 
 <!-- DASHBOARD -->
 <div class="dashboard">
@@ -70,7 +70,6 @@ button{margin:3px;cursor:pointer}
 
 <script>
 
-// ✅ FIREBASE
 const config={
  apiKey:"AIzaSyASsFAKZ5t1YUylzLfQVuDtpzAWnAsCS8g",
  authDomain:"tablero-kamban.firebaseapp.com",
@@ -90,7 +89,6 @@ db.collection("kanban").onSnapshot(s=>{
  cards=[];
  s.forEach(d=>{
   let x=d.data();
-
   cards.push({
    id:d.id,
    text:x.text || "Tarea",
@@ -99,29 +97,25 @@ db.collection("kanban").onSnapshot(s=>{
    col:x.col ?? 0
   });
  });
-
  render();
 });
 
 // crear
 function crear(){
  if(!tarea.value)return;
-
  db.collection("kanban").add({
   text:tarea.value,
   prioridad:prioridad.value,
   responsable:responsable.value,
   col:0
  });
-
  tarea.value="";
 }
 
 // editar
 function editar(id,t){
- let nt=prompt("Editar tarea",t);
+ let nt=prompt("Editar",t);
  if(!nt)return;
-
  db.collection("kanban").doc(id).update({text:nt});
 }
 
@@ -145,7 +139,6 @@ function render(){
  col.className="col";
 
  col.ondragover=e=>e.preventDefault();
-
  col.ondrop=()=>{
   if(dragId){
    db.collection("kanban").doc(dragId).update({col:i});
@@ -168,8 +161,7 @@ function render(){
   "✅";
 
  col.innerHTML+=`
- <div class="card"
- draggable="true"
+ <div class="card" draggable="true"
  ondragstart="drag('${x.id}')"
  style="border-left:6px solid ${color}">
 
@@ -180,8 +172,7 @@ function render(){
  <br>
  <button onclick="editar('${x.id}','${x.text}')">✏️</button>
  <button onclick="eliminar('${x.id}')">🗑️</button>
- </div>
- `;
+ </div>`;
  });
 
  board.appendChild(col);
@@ -190,17 +181,17 @@ function render(){
  dashboard();
 }
 
-// 📊 DASHBOARD
+// dashboard
 function dashboard(){
 
- let alta = cards.filter(x=>x.prioridad==="Alta").length;
- let media = cards.filter(x=>x.prioridad==="Media").length;
- let baja = cards.filter(x=>x.prioridad==="Baja").length;
+ let alta=cards.filter(x=>x.prioridad==="Alta").length;
+ let media=cards.filter(x=>x.prioridad==="Media").length;
+ let baja=cards.filter(x=>x.prioridad==="Baja").length;
 
- let p = cards.filter(x=>x.col===0).length;
- let pr = cards.filter(x=>x.col===1).length;
- let r = cards.filter(x=>x.col===2).length;
- let t = cards.filter(x=>x.col===3).length;
+ let p=cards.filter(x=>x.col===0).length;
+ let pr=cards.filter(x=>x.col===1).length;
+ let r=cards.filter(x=>x.col===2).length;
+ let t=cards.filter(x=>x.col===3).length;
 
  if(ch1)ch1.destroy();
  ch1=new Chart(c1,{
@@ -208,6 +199,7 @@ function dashboard(){
   data:{
    labels:["Alta","Media","Baja"],
    datasets:[{
+    label:"Tareas",
     data:[alta,media,baja],
     backgroundColor:["#e74c3c","#f1c40f","#2ecc71"]
    }]
@@ -217,11 +209,16 @@ function dashboard(){
  if(ch2)ch2.destroy();
  ch2=new Chart(c2,{
   type:"bar",
-  data:{ labels:COLS,
-   datasets:[{data:[p,pr,r,t]}]
+  data:{
+   labels:COLS,
+   datasets:[{
+    label:"Tareas",
+    data:[p,pr,r,t]
+   }]
   }
  });
 
+ // productividad
  let prod={};
  cards.forEach(x=>{
   if(x.col===3){
@@ -232,21 +229,31 @@ function dashboard(){
  if(ch3)ch3.destroy();
  ch3=new Chart(c3,{
   type:"bar",
-  data:{labels:Object.keys(prod),
-  datasets:[{data:Object.values(prod)}]}
+  data:{
+   labels:Object.keys(prod),
+   datasets:[{
+    label:"Tareas completadas",
+    data:Object.values(prod)
+   }]
+  }
  });
 
  if(ch4)ch4.destroy();
  ch4=new Chart(c4,{
   type:"line",
-  data:{labels:COLS,
-  datasets:[{data:[p,pr,r,t]}]}
+  data:{
+   labels:COLS,
+   datasets:[{
+    label:"Flujo de tareas",
+    data:[p,pr,r,t]
+   }]
+  }
  });
 
  let resp={};
  cards.forEach(x=>{
   if(!resp[x.responsable]){
-   resp[x.responsable]={Alta:0,Media:0,Baja:0};
+    resp[x.responsable]={Alta:0,Media:0,Baja:0};
   }
   resp[x.responsable][x.prioridad]++;
  });
@@ -267,7 +274,7 @@ function dashboard(){
  });
 }
 
-// 📥 EXPORTAR A EXCEL
+// 📥 Excel
 function exportExcel(){
 
  let data=[["Tarea","Responsable","Prioridad","Estado"]];
@@ -282,6 +289,27 @@ function exportExcel(){
  XLSX.utils.book_append_sheet(wb,ws,"Kanban");
 
  XLSX.writeFile(wb,"Tareas.xlsx");
+}
+
+// 📄 PDF
+async function exportPDF(){
+
+ const { jsPDF } = window.jspdf;
+ const pdf = new jsPDF();
+
+ let charts=["c1","c2","c3","c4","c5"];
+
+ for(let i=0;i<charts.length;i++){
+  let canvas=document.getElementById(charts[i]);
+  let img=canvas.toDataURL("image/png");
+
+  if(i!==0) pdf.addPage();
+
+  pdf.text("Grafica "+(i+1),10,10);
+  pdf.addImage(img,"PNG",10,20,180,100);
+ }
+
+ pdf.save("Dashboard_Kanban.pdf");
 }
 
 </script>
